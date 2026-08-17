@@ -1,48 +1,44 @@
-import asyncio
-import httpx
-from datetime import datetime, timezone
+name: Trading Bot Webhook
 
-MAX_DAILY_LOSS_LIMIT = 0.04
-DAILY_PROFIT_TARGET = 1.00
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
 
-trade_executed_today = False
-last_trade_day = None
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-def check_daily_reset(current_utc_time):
-    global trade_executed_today, last_trade_day
-    current_day = current_utc_time.day
-    if last_trade_day != current_day:
-        trade_executed_today = False
-        last_trade_day = current_day
+      - name: Install dependencies
+        run: |
+          pip install httpx pytz
 
-async def execute_trade():
-    global trade_executed_today
-    
-    now = datetime.now(timezone.utc)
-    check_daily_reset(now)
-    
-    if trade_executed_today:
-        return
+      - name: Send Webhook Signal
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          python -c "
+          import asyncio
+          import httpx
+          import os
+          from datetime import datetime
+          import pytz
 
-    target_hour = 8
-    
-    if now.hour >= target_hour:
-        signal_data = {
-            "action": "BUY",
-            "symbol": "EURUSD",
-            "volume": 0.1,
-            "max_loss_limit": MAX_DAILY_LOSS_LIMIT,
-            "profit_target": DAILY_PROFIT_TARGET
-        }
-        
-        print("==================================================")
-        print(f"[{now}] Trade Signal Generated Successfully:")
-        print(signal_data)
-        print(f"Max Loss Limit: {MAX_DAILY_LOSS_LIMIT * 100}%")
-        print(f"Profit Target: {DAILY_PROFIT_TARGET * 100}%")
-        print("==================================================")
-        
-        trade_executed_today = True
+          WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+          API_KEY = os.getenv('API_KEY')
 
-if __name__ == "__main__":
-    asyncio.run(execute_trade())
+          async def send_webhook():
+              payload = {'action': 'BUY', 'symbol': 'EURUSD', 'volume': 0.1}
+              headers = {'Authorization': f'Bearer {API_KEY}', 'Content-Type': 'application/json'}
+              async with httpx.AsyncClient() as client:
+                  response = await client.post(WEBHOOK_URL, json=payload, headers=headers)
+                  print(f'Response Status: {response.status_code}')
+
+          asyncio.run(send_webhook())
+          "
