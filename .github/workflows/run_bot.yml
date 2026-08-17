@@ -1,26 +1,48 @@
-name: Automated Multi-Broker Trading Bot
+import asyncio
+import httpx
+from datetime import datetime, timezone
 
-on:
-  schedule:
-    - cron: '0 8 * * *'
-  workflow_dispatch:
+MAX_DAILY_LOSS_LIMIT = 0.04
+DAILY_PROFIT_TARGET = 1.00
 
-jobs:
-  run-bot-job:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+trade_executed_today = False
+last_trade_day = None
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+def check_daily_reset(current_utc_time):
+    global trade_executed_today, last_trade_day
+    current_day = current_utc_time.day
+    if last_trade_day != current_day:
+        trade_executed_today = False
+        last_trade_day = current_day
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+async def execute_trade():
+    global trade_executed_today
+    
+    now = datetime.now(timezone.utc)
+    check_daily_reset(now)
+    
+    if trade_executed_today:
+        return
 
-      - name: Run Bot Script
-        run: python bot.py
+    target_hour = 8
+    
+    if now.hour >= target_hour:
+        signal_data = {
+            "action": "BUY",
+            "symbol": "EURUSD",
+            "volume": 0.1,
+            "max_loss_limit": MAX_DAILY_LOSS_LIMIT,
+            "profit_target": DAILY_PROFIT_TARGET
+        }
+        
+        print("==================================================")
+        print(f"[{now}] Trade Signal Generated Successfully:")
+        print(signal_data)
+        print(f"Max Loss Limit: {MAX_DAILY_LOSS_LIMIT * 100}%")
+        print(f"Profit Target: {DAILY_PROFIT_TARGET * 100}%")
+        print("==================================================")
+        
+        trade_executed_today = True
+
+if __name__ == "__main__":
+    asyncio.run(execute_trade())
