@@ -3,7 +3,7 @@ import httpx
 from datetime import datetime, timezone
 
 MAX_DAILY_LOSS_LIMIT = 0.04
-DAILY_PROFIT_TARGET = 0.02
+DAILY_PROFIT_TARGET = 1.00
 
 trade_executed_today = False
 last_trade_day = None
@@ -35,8 +35,12 @@ async def execute_trade():
             "profit_target": DAILY_PROFIT_TARGET
         }
         
-        # تنفيذ الإشارة أو الطباعة المباشرة بدون روابط
-        print(f"[{now}] Trade Signal Generated Successfully: {signal_data}")
+        print("==================================================")
+        print(f"[{now}] Trade Signal Generated Successfully:")
+        print(signal_data)
+        print(f"Max Loss Limit: {MAX_DAILY_LOSS_LIMIT * 100}%")
+        print(f"Profit Target: {DAILY_PROFIT_TARGET * 100}%")
+        print("==================================================")
         
         trade_executed_today = True
 
