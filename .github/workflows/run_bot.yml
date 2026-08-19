@@ -1,44 +1,42 @@
-name: Trading Bot Webhook
+import asyncio
+import aiohttp
+import time
+import os
+from web3 import AsyncWeb3, AsyncHTTPProvider
 
-on:
-  schedule:
-    - cron: '0 8 * * *'
-  workflow_dispatch:
+RPC_URL = "https://testnet.rpc.url.here"
+w3 = AsyncWeb3(AsyncHTTPProvider(RPC_URL))
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+async def send_fast_transaction(session, wallet_private_key, target_contract):
+    start_time = time.time()
+    try:
+        nonce = await w3.eth.get_transaction_count(wallet_private_key)
+        
+        tx = {
+            'nonce': nonce,
+            'to': target_contract,
+            'value': w3.to_wei(0.0001, 'ether'),
+            'gas': 21000,
+            'gasPrice': w3.to_wei(2, 'gwei'),
+            'chainId': w3.eth.chain_id
+        }
+        
+        signed_tx = w3.eth.account.sign_transaction(tx, wallet_private_key)
+        tx_hash = await w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        
+        elapsed = time.time() - start_time
+        print(f"Success: {elapsed:.4f}s | Hash: {tx_hash.hex()}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
 
-      - name: Install dependencies
-        run: |
-          pip install httpx pytz
+async def main():
+    wallet_private_key = os.getenv("WALLET_PRIVATE_KEY", "YOUR_WALLET_PRIVATE_KEY")
+    target_contract = "0xYourTargetTestnetContractHere"
+    
+    async with aiohttp.ClientSession() as session:
+        tasks = [send_fast_transaction(session, wallet_private_key, target_contract) for _ in range(10)]
+        await asyncio.gather(*tasks)
 
-      - name: Send Webhook Signal
-        env:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-          API_KEY: ${{ secrets.API_KEY }}
-        run: |
-          python -c "
-          import asyncio
-          import httpx
-          import os
-          from datetime import datetime
-          import pytz
-
-          WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-          API_KEY = os.getenv('API_KEY')
-
-          async def send_webhook():
-              payload = {'action': 'BUY', 'symbol': 'EURUSD', 'volume': 0.1}
-              headers = {'Authorization': f'Bearer {API_KEY}', 'Content-Type': 'application/json'}
-              async with httpx.AsyncClient() as client:
-                  response = await client.post(WEBHOOK_URL, json=payload, headers=headers)
-                  print(f'Response Status: {response.status_code}')
-
-          asyncio.run(send_webhook())
-          "
+if __name__ == "__main__":
+    asyncio.run(main())
