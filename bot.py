@@ -1,56 +1,65 @@
-import os
 import json
 import random
 import time
-from eth_account import Account
+from web3 import Web3
 
-Account.enable_unaudited_hdwallet_features()
+RPC_LIST = [
+    "https://eth-sepolia.g.alchemy.com/v2/demo",
+    "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+    "https://rpc.ankr.com/eth_sepolia",
+    "https://ethereum-sepolia-rpc.publicnode.com"
+]
 
-def generate_wallets(num_wallets=10):
-    wallets = []
-    print(f"[*] Generating {num_wallets} random EVM wallets...")
-    
-    for i in range(num_wallets):
-        account = Account.create()
-        wallet_info = {
-            "id": i + 1,
-            "address": account.address,
-            "private_key": account._private_key.hex()
-        }
-        wallets.append(wallet_info)
-    
-    with open("wallets.json", "w") as f:
-        json.dump(wallets, f, indent=4)
-        
-    print("[+] Wallets generated and saved in 'wallets.json'!")
-    return wallets
+def get_working_w3():
+    for rpc in RPC_LIST:
+        w3 = Web3(Web3.HTTPProvider(rpc))
+        if w3.is_connected():
+            return w3
+    return None
 
-def simulate_human_farming():
-    if not os.path.exists("wallets.json"):
-        print("[-] Error: wallets.json not found.")
+def load_wallets():
+    try:
+        with open("wallets.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+def main():
+    w3 = get_working_w3()
+    if not w3 or not w3.is_connected():
         return
 
-    with open("wallets.json", "r") as f:
-        wallets = json.load(f)
+    wallets = load_wallets()
+    if not wallets:
+        return
 
-    print(f"[*] Starting farming simulation for {len(wallets)} wallets...")
+    for i, wallet in enumerate(wallets):
+        address = wallet["address"]
+        private_key = wallet["private_key"]
+        
+        try:
+            balance = w3.eth.get_balance(address)
+            
+            if balance > 0:
+                nonce = w3.eth.get_transaction_count(address)
+                gas_price = w3.eth.gas_price
+                
+                tx = {
+                    'nonce': nonce,
+                    'to': address,
+                    'value': w3.to_wei(0.00001, 'ether'),
+                    'gas': 21000,
+                    'gasPrice': gas_price,
+                    'chainId': 11155111
+                }
+                
+                signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+                tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        except Exception as e:
+            pass
 
-    for wallet in wallets:
-        print(f"\n--- Processing Wallet #{wallet['id']} ({wallet['address'][:6]}...{wallet['address'][-4:]}) ---")
-        
-        delay = random.randint(30, 120)
-        print(f"[*] Anti-Sybil: Sleeping for {delay} seconds...")
-        time.sleep(delay)
-        
-        random_amount = round(random.uniform(0.0001, 0.005), 6)
-        print(f"[*] Simulating transaction with amount: {random_amount} ETH...")
-        
-        print(f"[+] Wallet #{wallet['id']} action successful.")
-
-    print("\n[+] Cycle completed successfully.")
+        sleep_time = random.randint(10, 30)
+        time.sleep(sleep_time)
 
 if __name__ == "__main__":
-    if not os.path.exists("wallets.json"):
-        generate_wallets(20)
-    
-    simulate_human_farming()
+    main()
